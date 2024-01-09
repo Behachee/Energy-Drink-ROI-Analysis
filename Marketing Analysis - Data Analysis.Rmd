@@ -1,0 +1,647 @@
+---
+title: "Marketing Analysis"
+author: "Théo"
+date: "2023-12-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load}
+# Load R.Data File
+data = load("EnergySales.RData")
+
+# Show hidden object
+ls()
+
+```
+## Libraries installation
+
+```{r setup-ggplot2, include=FALSE}
+# Install ggplot2 if it's not already installed
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  install.packages("ggplot2")
+}
+# Load ggplot2 package
+library(ggplot2)
+```
+
+```{r data-quality-setup}
+# Install and load required packages
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  install.packages("dplyr")
+}
+library(dplyr)
+
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  install.packages("ggplot2")
+}
+library(ggplot2)
+
+if (!requireNamespace("reshape2", quietly = TRUE)) {
+  install.packages("reshape2")
+}
+library(reshape2)
+```
+
+# Data Overview
+
+``` {r Data Overview}
+# Preview of the data
+head(MunsterSalesGER)
+
+# Dimensions of the data
+dim(MunsterSalesGER)
+
+# Names of features/columns
+names(MunsterSalesGER)
+
+```
+''' 
+Conclusion:
+- 104 Rows and 9 Features 
+- Features : 
+  - "Week" -> Number of the week in the year
+  - "Sales" -> Sales of Energy Drink for that week
+  - "OutofHome" -> Price of marketing in OutofHome
+  - "PrintMagazine" -> Cost of Print Magazine advertising
+  - "PosDisplay" -> Cost of Pos Display advertising
+  - "SEAGoogle" -> Cost of SEA Google advertising
+  - "SportSponsoring" -> Cost of Sport Sponsorship
+  - "TVAdsLocal" -> Cost of TV Adversiting Local    
+  - "Youtube" -> Cost of Youtube Advertising      
+
+'''
+
+# Data Analysis
+``` {r Data Analysis}
+# Number of rows and columns
+dim(MunsterSalesGER)
+
+# Data types of each feature
+sapply(MunsterSalesGER, class)
+
+# Count of missing values per column
+sapply(MunsterSalesGER, function(x) sum(is.na(x)))
+
+
+```
+
+'''
+Conclusion :
+-  Data Type:
+  - Week : Integer
+  - Sales : Numeric
+  - OutofHome : Numeric
+  - PrintMagazine : Numeric
+  - PosDisplay : Numeric
+  - SEAGoogle : Numeric
+  - SportSponsoring : Numeric
+  - TVAdsLocal : Numeric
+  - Youtube : Numeric
+  
+- Missing Values
+  - No Missing Value
+'''
+
+# Data Statistics Summary
+``` {r Descriptive Statistics}
+# Basic statistical summary
+summary(MunsterSalesGER)
+```
+
+# Data Distribution
+``` {r Data Distribution}
+# Histogram for each numerical variable with feature names in the title
+for(feature in names(MunsterSalesGER)) {
+  if(is.numeric(MunsterSalesGER[[feature]])) {
+    hist(MunsterSalesGER[[feature]], main = paste("Histogram of", feature), xlab = feature)
+  }
+}
+
+```
+
+'''
+Gaussian Like Distribution : 
+  - Youtube
+  - TVAdsLocal
+  - SportSponsoring
+  
+Left Skewed : 
+ - OutofHome
+ - SEAGoogle
+ - PosDisplay
+ - Sales
+ - PrintMagazine
+'''
+
+
+# Patern in Data
+```{r find-patterns-munstersalesger}
+
+# Pairwise relationships between numerical variables in MunsterSalesGER
+if(sum(sapply(MunsterSalesGER, is.numeric)) > 1) {
+  pairs(MunsterSalesGER[, sapply(MunsterSalesGER, is.numeric)], main = "Pairwise Relationships in MunsterSalesGER")
+}
+
+# Correlation matrix for numerical variables in MunsterSalesGER
+num_data_munster <- MunsterSalesGER[, sapply(MunsterSalesGER, is.numeric)]
+corr_matrix_munster <- cor(num_data_munster, use = "complete.obs")
+corr_matrix_munster
+
+# Heatmap of the correlation matrix
+library(reshape2)
+melted_corr_munster <- melt(corr_matrix_munster)
+ggplot(melted_corr_munster, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(midpoint = 0, limit = c(-1, 1), space = "Lab",
+                       name="Pearson\nCorrelation") +
+  theme_minimal() +
+  coord_fixed()
+
+# Boxplots for categorical vs numerical variables in MunsterSalesGER
+for(cat_var in names(MunsterSalesGER[sapply(MunsterSalesGER, is.factor)])) {
+  for(num_var in names(MunsterSalesGER[sapply(MunsterSalesGER, is.numeric)])) {
+    boxplot(MunsterSalesGER[[num_var]] ~ MunsterSalesGER[[cat_var]], 
+            main = paste("Boxplot of", num_var, "by", cat_var),
+            xlab = cat_var, ylab = num_var)
+  }
+}
+
+# Scatter plots for potential relationships in MunsterSalesGER
+# Replace 'variable1' and 'variable2' with actual variable names from your dataset
+if(sum(sapply(MunsterSalesGER, is.numeric)) > 1) {
+  with(MunsterSalesGER, plot(Sales, PosDisplay, main = "Scatter Plot of Sales vs PosDisplay in MunsterSalesGER"))
+}
+
+
+
+```
+'''
+Conclusion : 
+ - Sales and PosDisplay seems to be very well correlated (Pearson Coefficient more than 0.7)
+ - Sales and TVAdsLocal seems to be correlated (Pearson Coefficient around 0.5)
+ 
+The Scatter plot of Sales vs PosDisplay shows a linear correlation between those two variables with some homeoscadicity (increase in variance of one variable with the increase in the other variable)
+
+'''
+
+# Data Quality Assessment for MunsterSalesGER
+``` {r outlier-detection, fig.width=12, fig.height=8}
+## Boxplots for Outlier Detection with Adjusted Margins
+num_columns <- sapply(MunsterSalesGER, is.numeric)
+if(sum(num_columns) > 0) {
+  par(mfrow=c(ceiling(sum(num_columns)/2), 2), mar=c(2, 2, 2, 2))
+  for(i in which(num_columns)) {
+    boxplot(MunsterSalesGER[[i]], main = names(MunsterSalesGER)[i], las = 2)
+  }
+}
+
+```
+'''
+Conclusion 
+
+ - In the Sales we can see outliers in the extrem values
+ 
+'''
+
+``` {r Consistency Check}
+
+# Consistency Check (Example: Checking for negative values in a variable that should only have positive values)
+if("Sales" %in% names(MunsterSalesGER)) {
+  inconsistent_values <- MunsterSalesGER[MunsterSalesGER$variable_name < 0, ]
+  print(inconsistent_values)
+}
+
+```
+
+# Check Patern in the Data
+``` {r Trend Line}
+
+
+library(ggplot2)
+library(rlang) # for sym()
+
+# Compute the correlation matrix for numeric variables only
+numeric_data <- MunsterSalesGER[sapply(MunsterSalesGER, is.numeric)]
+correlation_matrix <- cor(numeric_data, use = "complete.obs")
+
+# Find pairs with strong correlation
+strong_correlations <- which(abs(correlation_matrix) > 0.5, arr.ind = TRUE)
+
+# Filter out correlations of variables with themselves
+strong_correlations <- strong_correlations[strong_correlations[, 1] != strong_correlations[, 2], ]
+
+# Iterate over pairs and plot with R-squared and equation
+for (i in 1:nrow(strong_correlations)) {
+  var1 <- names(numeric_data)[strong_correlations[i, 1]]
+  var2 <- names(numeric_data)[strong_correlations[i, 2]]
+
+  # Fit linear model
+  lm_model <- lm(as.formula(paste(var2, "~", var1)), data = numeric_data)
+  summary_lm <- summary(lm_model)
+  r_squared <- summary_lm$r.squared
+  coef_lm <- summary_lm$coefficients
+  
+  # Equation text
+  intercept <- round(coef_lm[1, 1], 2)
+  slope <- round(coef_lm[2, 1], 2)
+  equation <- paste("y =", intercept, ifelse(slope >= 0, "+", ""), slope, "x")
+
+  # Plot
+  p <- ggplot(numeric_data, aes(x = !!sym(var1), y = !!sym(var2))) +
+    geom_point() +
+    geom_smooth(method = "lm", col = "blue") +
+    ggtitle(paste("Regression of", var2, "on", var1)) +
+    annotate("text", x = Inf, y = Inf, label = paste("R² =", round(r_squared, 2), ";", equation), 
+             hjust = 1.1, vjust = 1.1, size = 3, colour = "blue")
+
+  print(p)
+}
+```
+''' Conclusion 
+
+We saw that PosDisplay and Sales were highly correlated, so we plot the linear regression of PosDisplay according to Sales. 
+
+Line Equation : 
+Sales = 412033993.25 + 102630 * PosDisplay 
+
+Fitting Coefficient :
+R2 = 0.72
+
+'''
+
+``` {r Plot TimeSeries}
+library(ggplot2)
+
+# Assuming your dataframe is named 'data'
+# Identify the numerical columns
+numeric_columns <- sapply(MunsterSalesGER, is.numeric)
+# Exclude the 'Week' column from the list of numerical columns
+numeric_columns["Week"] <- FALSE
+
+# Create a plot for each numerical column
+plots <- lapply(names(MunsterSalesGER)[numeric_columns], function(column) {
+  ggplot(MunsterSalesGER, aes_string(x = "Week", y = column)) +
+    geom_line() +  # Use geom_line if you want a line plot for each week
+    labs(title = paste("Plot of", column, "by Week"),
+         x = "Week",
+         y = column)
+})
+
+# Display the plots (this part depends on your working environment)
+# If you are using RStudio, you can view them in the 'Plots' window by doing:
+for (plot in plots) {
+  print(plot)
+}
+
+```
+
+
+```{r Cumulative Sum}
+
+cumulative_sum <- colSums(MunsterSalesGER[, -(1:2)], na.rm = TRUE)
+
+# Create a histogram for total sum expenses
+histogram_total <- ggplot() +
+  geom_bar(aes(x = reorder(names(cumulative_sum), cumulative_sum, FUN = function(x) -x), y = cumulative_sum),
+           stat = "identity", fill = "orange", color = "black", alpha = 0.7) +
+  labs(title = "Total Marketing Budget Expense Across Categories",
+       x = "Marketing Channel",
+       y = "Total Expense") +
+  theme_minimal() +
+  geom_text(aes(x = reorder(names(cumulative_sum), cumulative_sum, FUN = function(x) -x), y = cumulative_sum,
+                label = sprintf("%.2e", cumulative_sum)),  # Change here for rounded scientific notation
+            vjust = -0.5, color = "black", size = 3) +
+  annotate("text", x = 1, y = max(cumulative_sum) * 1.1,
+           label = paste("Total: ", sprintf("%.2e", sum(cumulative_sum))),  # Change here for rounded scientific notation
+           color = "red", size = 4)
+
+print(histogram_total)
+
+
+
+
+
+```
+'''
+Conclusion: 
+We can see that the top 3 Advertising MArketing Budget are allocated to Print Magazine, Sport Sponsoring and TVAdsLocal
+'''
+
+```{r Average Expenses By Marteketing Segment}
+average_expense <- colMeans(MunsterSalesGER[, -(1:2)], na.rm = TRUE)
+
+# Create a bar chart for average expenses
+bar_chart <- ggplot() +
+  geom_bar(aes(x = reorder(names(average_expense), average_expense), y = average_expense),
+           stat = "identity", fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Average Marketing Budget Expense Across Categories",
+       x = "Marketing Channel",
+       y = "Average Expense") +
+  theme_minimal()
+
+print(bar_chart)
+
+
+```
+
+```{r Pourcentage Expenses that explain Sales}
+
+average_percentage <- colMeans(MunsterSalesGER[, -(1:2)] / MunsterSalesGER$Sales, na.rm = TRUE) * 100
+
+# Create a bar chart for average percentage expenses
+bar_chart_percentage <- ggplot() +
+  geom_bar(aes(x = reorder(names(average_percentage), average_percentage, FUN = function(x) -mean(x)), 
+               y = average_percentage), 
+           stat = "identity", fill = "green", color = "black", alpha = 0.7) +
+  labs(title = "Average Marketing Budget Expense as Percentage of Sales Across Categories",
+       x = "Marketing Channel",
+       y = "Average Percentage Expense") +
+  theme_minimal()
+
+print(bar_chart_percentage)
+
+
+```
+'''
+Conclusion : 
+It's reassuring to see that the 3 Marketing Segment that we put the more money on are the one that contribute the most to Sales.
+'''
+
+```{r Test Stationarity}
+# Install the 'tseries' package if not already installed
+if (!require(tseries)) {
+  install.packages("tseries")
+  library(tseries)
+}
+
+
+# Assuming your dataframe is named 'data'
+# Identify the numerical columns excluding the 'Weeks' column
+numeric_columns <- sapply(MunsterSalesGER, is.numeric)
+numeric_columns["Weeks"] <- FALSE
+numeric_columns_names <- names(numeric_columns[numeric_columns])
+
+# Function to test stationarity and print results
+test_stationarity <- function(column_name) {
+  series <- MunsterSalesGER[[column_name]]
+  test_result <- adf.test(series, alternative = "stationary")
+
+  cat("Stationarity Test for column", column_name, ":\n")
+  print(test_result)
+  cat("\n")
+}
+
+# Apply the test to each numerical column
+lapply(numeric_columns_names, test_stationarity)
+```
+'''
+Conclusion:
+Chacune des TimeSeries sont Stationnaires on peut donc appliquer des modèles de Forecasting classique et autoregressif pour prédire les valeurs futures
+'''
+
+
+```{r Test Stationarity}
+# Install and load the Prophet package
+if (!require(prophet)) {
+  install.packages("prophet")
+  library(prophet)
+}
+
+# Check if 'Week' and 'Sales' columns are present
+if (!("Week" %in% names(MunsterSalesGER)) || !("Sales" %in% names(MunsterSalesGER))) {
+  stop("'Week' or 'Sales' column not found in the dataframe")
+}
+
+if (any(is.na(MunsterSalesGER$Week)) || any(is.na(MunsterSalesGER$Sales))) {
+  stop("Missing values detected in 'Week' or 'Sales' columns")
+}
+
+if (!require(Metrics)) {
+  install.packages("Metrics")
+  library(Metrics)
+}
+
+# Convertir 'Week' en format date
+start_date <- as.Date("2020-01-01")  # Ajustez cette date selon votre contexte
+MunsterSalesGER$Weeks <- start_date + 7 * MunsterSalesGER$Week
+
+# Préparer les données pour Prophet
+prophet_data <- data.frame(ds = MunsterSalesGER$Weeks, y = MunsterSalesGER$Sales)
+
+# Diviser les données en ensembles d'entraînement et de test
+train_data <- prophet_data[1:(nrow(prophet_data) - 30), ]
+test_data <- prophet_data[(nrow(prophet_data) - 29):nrow(prophet_data), ]
+
+# Créer et entraîner le modèle Prophet sur l'ensemble d'entraînement
+m <- prophet(train_data, yearly.seasonality=TRUE, weekly.seasonality = TRUE)
+
+# Faire des prévisions sur l'ensemble de test
+future <- data.frame(ds = test_data$ds)
+forecast <- predict(m, future)
+
+# Calculer le RMSE
+rmse_value <- rmse(test_data$y, forecast$yhat)
+
+# Calculer la moyenne des ventes réelles
+mean_sales <- mean(test_data$y)
+
+# Calculer et afficher l'écart en pourcentage du RMSE par rapport à la moyenne
+rmse_percentage_diff <- (rmse_value / mean_sales) * 100
+print(paste("RMSE:", rmse_value))
+print(paste("Mean Sales:", mean_sales))
+print(paste("Écart en pourcentage du RMSE par rapport à la moyenne:", rmse_percentage_diff, "%"))
+
+# Tracer les prévisions, les données historiques, et la tendance
+p <- plot(m, forecast)
+p + ggtitle("Prévisions des ventes avec tendance")
+
+# Création d'un plot personnalisé avec ggplot2
+# Combiner les données historiques et les prévisions
+historical <- data.frame(date = train_data$ds, sales = train_data$y, type = "Historical")
+predictions <- data.frame(date = forecast$ds, sales = forecast$yhat, type = "Forecast")
+combined_data <- rbind(historical, predictions)
+
+ggplot(combined_data, aes(x = date, y = sales, color = type)) +
+  geom_line() +
+  ggtitle("Historical Sales and Forecast") +
+  theme_minimal() +
+  scale_color_manual(values = c("Historical" = "blue", "Forecast" = "red"))
+
+# Tracer les composants du modèle, y compris la saisonnalité personnalisée
+components_plot <- prophet_plot_components(m, forecast)
+print(components_plot)
+```
+
+''' 
+Conclusion
+
+Here we have created a model that forecast the value of Sales for a period of 30 Weeks in the Future. Our model add daily, weekly and yearly seasonality (TBD).
+We can see that the model is ok but could be optimized. 
+
+We need to create also model Ensemble Model to try to predict the sales according to Expenses in Marketing Segment
+I'll try to do thatg
+'''
+
+```{r LGBM}
+
+# Installer et charger les packages nécessaires
+if (!require(lightgbm)) {
+  install.packages("lightgbm")
+  library(lightgbm)
+}
+
+if (!require(shapr)) {
+  install.packages("shapr")
+  library(shapr)
+}
+
+# Installer et charger LightGBM
+if (!require(lightgbm)) {
+  install.packages("lightgbm")
+  library(lightgbm)
+}
+
+# Supposons que votre dataframe s'appelle MunsterSalesGER et contient les colonnes 'Sales' et 'Week'
+# Convertir la colonne 'Week' en caractéristiques sinusoïdales
+MunsterSalesGER$sin_week <- sin(2 * pi * MunsterSalesGER$Week / 52)
+MunsterSalesGER$cos_week <- cos(2 * pi * MunsterSalesGER$Week / 52)
+
+# Préparer les ensembles de données pour l'entraînement
+target <- MunsterSalesGER$Sales
+features <- MunsterSalesGER[, !(names(MunsterSalesGER) %in% c("Sales", "Week"))]
+head(features)
+# Convertir en LightGBM Dataset
+train_data <- lgb.Dataset(data = as.matrix(features), label = target)
+
+# Paramètres de LightGBM
+params <- list(
+  objective = "regression",
+  metric = "rmse",
+  num_leaves = 31,
+  learning_rate = 0.05,
+  n_estimators = 100
+)
+
+# Entraîner le modèle LightGBM
+model <- lgb.train(params, train_data, 100)
+
+# Faire des prédictions sur l'ensemble des données (pour simplifier, on utilise tout le dataset)
+predictions <- predict(model, as.matrix(features))
+
+# Calculer le RMSE
+rmse_value <- sqrt(mean((target - predictions)^2))
+
+# Calculer la moyenne des ventes réelles
+mean_sales <- mean(target)
+
+# Calculer et afficher l'écart en pourcentage du RMSE par rapport à la moyenne
+rmse_percentage_diff <- (rmse_value / mean_sales) * 100
+print(paste("RMSE:", rmse_value))
+print(paste("Mean Sales:", mean_sales))
+print(paste("Écart en pourcentage du RMSE par rapport à la moyenne:", rmse_percentage_diff, "%"))
+
+# Création d'un plot personnalisé avec ggplot2
+library(ggplot2)
+combined_data <- data.frame(Date = 1:length(predictions), Sales = target, Predictions = predictions)
+ggplot(combined_data, aes(x = Date)) +
+  geom_line(aes(y = Sales, colour = "Actual")) +
+  geom_line(aes(y = Predictions, colour = "Predicted")) +
+  labs(title = "Actual vs Predicted Sales", y = "Sales", x = "Date") +
+  scale_colour_manual("", 
+                      breaks = c("Actual", "Predicted"),
+                      values = c("blue", "red"))
+
+# Calculer l'importance des caractéristiques
+feature_importance <- lgb.importance(model, percentage = TRUE)
+
+# Visualiser l'importance des caractéristiques
+lgb.plot.importance(feature_importance, top_n = 15, measure = "Gain")
+
+# Ou, pour une visualisation personnalisée avec ggplot2
+library(ggplot2)
+ggplot(feature_importance, aes(x = reorder(Feature, Gain), y = Gain)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Feature Importance (based on Gain)", x = "Features", y = "Gain")
+
+```
+
+```{r LGBM FineTune}
+# Define a grid of hyperparameters to test
+grid <- expand.grid(
+  num_leaves = c(31, 50, 70),  # Number of leaves in one tree
+  learning_rate = c(0.01, 0.05, 0.1),  # Learning rate
+  n_estimators = c(100, 200, 300)  # Number of boosting iterations
+)
+
+# Placeholder for the best model and its performance
+best_model <- NULL
+best_rmse <- Inf
+best_params <- NULL
+best_percentage_diff <- Inf
+
+# Boucle sur la grille de paramètres
+for(i in 1:nrow(grid)) {
+  params <- list(
+    objective = "regression",
+    metric = "rmse",
+    num_leaves = grid$num_leaves[i],
+    learning_rate = grid$learning_rate[i],
+    n_estimators = grid$n_estimators[i]
+  )
+  
+  # Entraîner le modèle
+  model <- lgb.train(params, train_data, grid$n_estimators[i])
+
+  # Faire des prédictions et calculer le RMSE
+  predictions <- predict(model, as.matrix(features))
+  rmse_value <- sqrt(mean((target - predictions)^2))
+
+  # Calculer la moyenne des ventes
+  mean_sales <- mean(target)
+
+  # Calculer la différence en pourcentage entre la mean et le RMSE
+  percentage_diff <- (rmse_value / mean_sales) * 100
+
+  # Mettre à jour le meilleur modèle si une amélioration est trouvée
+  if(rmse_value < best_rmse) {
+    best_rmse <- rmse_value
+    best_model <- model
+    best_params <- params
+    best_percentage_diff <- percentage_diff
+  }
+}
+
+# Assurez-vous que les mêmes transformations sont appliquées
+MunsterSalesGER$sin_week <- sin(2 * pi * MunsterSalesGER$Week / 52)
+MunsterSalesGER$cos_week <- cos(2 * pi * MunsterSalesGER$Week / 52)
+
+# Sélectionnez les caractéristiques pour la prédiction, en excluant 'Sales' et 'Week'
+features_for_prediction <- MunsterSalesGER[, !(names(MunsterSalesGER) %in% c("Sales", "Week"))]
+
+# Utiliser le meilleur modèle pour faire des prédictions
+predicted_sales <- predict(best_model, as.matrix(features_for_prediction))
+
+# Ajouter les prédictions au dataframe original pour une comparaison ultérieure
+MunsterSalesGER$predicted_sales <- predicted_sales
+
+# Création du graphique avec ggplot2
+ggplot(MunsterSalesGER, aes(x = Week)) +
+  geom_line(aes(y = Sales, colour = "Actual Sales")) +
+  geom_line(aes(y = predicted_sales, colour = "Predicted Sales")) +
+  labs(title = "Comparaison des ventes réelles et prédites",
+       x = "Semaine",
+       y = "Ventes",
+       colour = "Légende") +
+  theme_minimal() +
+  scale_colour_manual(values = c("Actual Sales" = "blue", "Predicted Sales" = "red"))
+
+# Vous pouvez maintenant utiliser best_model pour des prédictions ou des analyses supplémentaires
+```
+
+
