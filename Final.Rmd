@@ -1,0 +1,864 @@
+---
+title: "Marketing Analytics - Münster Energy Drinks"
+author: "Julien Auffret, Théo Belen-Halimi, Charlotte Cupillard, Olivia De La Chapelle, Nathan Khayat, Aurore Monnais, Hannah Revcolevschi"
+output: html_document
+date: "2024-01-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=TRUE}
+#Load necessary libraries
+library(dplyr)
+library(ggplot2)
+```
+
+```{r, include=TRUE}
+#Load the data into "data"
+load("EnergySales.RData")
+data<- MunsterSalesGER
+```
+
+# Data Description
+
+## Overview and Statistics
+
+```{r, include=TRUE}
+#Structure of the dataset
+str(data)
+```
+
+```{r, include=TRUE}
+#Dimensions of the data
+dim(data)
+```
+
+```{r, include=TRUE}
+#Data types of each feature
+sapply(data, class)
+```
+
+```{r, include=TRUE}
+head(data)
+```
+
+```{r, include=TRUE}
+summary(data)
+```
+
+```{r, include=TRUE}
+#Count of missing values
+sapply(data, function(x) sum(is.na(x)))
+```
+
+```{r, include=TRUE}
+new_data <- data
+
+#Add a new column 'Quarter'
+new_data$Quarter <- cut(new_data$Week, breaks = c(1, 13, 26, 39, 52), labels = c("Q1", "Q2", "Q3", "Q4"))
+
+#Boxplot of Sales by Quarter
+ggplot(new_data, aes(x = Quarter, y = Sales)) +
+  geom_boxplot() +  # Add a boxplot layer
+  labs(title = "Boxplot of Sales by Quarter",
+       x = "Quarter",
+       y = "Sales") +
+  theme_minimal()
+
+```
+
+
+
+```{r, include=TRUE}
+#Scatter plot of Sales per Weeks
+ggplot(data,aes(x = Week, y = Sales)) +
+  geom_line() +
+  labs(x = "Weeks",
+       y = "Sales")
+```
+
+```{r, include=TRUE}
+#Histogram for each feature except week
+for(feature in names(data)) {
+  if(is.numeric(data[[feature]]) & feature != "Week") {
+    hist(data[[feature]], main = paste("Histogram of", feature), xlab = feature)
+  }
+}
+```
+Histogram with a Gaussian Like Distribution : 
+  - Youtube
+  - TVAdsLocal
+  - SportSponsoring
+  
+Left Skewed histogram: 
+ - OutofHome
+ - SEAGoogle
+ - PosDisplay
+ - Sales
+ - PrintMagazine
+ 
+```{r, include=TRUE}
+library(ggplot2)
+
+numeric_columns <- sapply(data, is.numeric)
+#Exclude column "Week"
+numeric_columns["Week"] <- FALSE
+
+#Plot for each feature per week
+plots <- lapply(names(data)[numeric_columns], function(column) {
+  ggplot(data, aes_string(x = "Week", y = column)) +
+    geom_line() +
+    labs(title = paste("Plot of", column, "by Week"),
+         x = "Week",
+         y = column)
+})
+for (plot in plots) {
+  print(plot)
+}
+```
+
+```{r,include=TRUE, outlier-detection, fig.width=12, fig.height=8}
+#Boxplots for each feature to detect outliers, except week
+num_columns <- sapply(data, is.numeric)
+if (sum(num_columns) > 0) {
+  if (any(names(data) != "Week")) {
+    par(mfrow=c(ceiling(sum(num_columns)/2), 2), mar=c(2, 2, 2, 2))
+    for (i in which(num_columns)) {
+      if (names(data)[i] != "Week") {
+        boxplot(data[[i]], main=names(data)[i], las=2)
+      }
+    }
+  }
+}
+```
+We are seeing some outliers for sales.
+
+## Correlations
+
+```{r, include=TRUE}
+#Correlations between features
+if(sum(sapply(data, is.numeric)) > 1) {
+  pairs(data[, sapply(data, is.numeric)], main = "Pairwise Relationships")
+}
+```
+
+```{r, include=TRUE}
+#Correlation matrix between features
+num_data_munster <- data[, sapply(data, is.numeric)]
+corr_matrix_munster <- cor(num_data_munster, use = "complete.obs")
+corr_matrix_munster
+```
+
+```{r, include=TRUE}
+#Heatmap of the correlation matrix
+library(reshape2)
+melted_corr_munster <- melt(corr_matrix_munster)
+ggplot(melted_corr_munster, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(midpoint = 0, limit = c(-1, 1), space = "Lab",
+                       name="Pearson\nCorrelation") +
+  theme_minimal() +
+  coord_fixed()
+```
+```{r, include=TRUE}
+if(sum(sapply(MunsterSalesGER, is.numeric)) > 1) {
+  with(MunsterSalesGER, plot(Sales, PosDisplay, main = "Scatter Plot of Sales vs PosDisplay in MunsterSalesGER"))
+}
+```
+
+Sales and PosDisplay seems to be very well correlated (Pearson Coefficient more than 0.7)
+Sales and TVAdsLocal seems to be correlated (Pearson Coefficient around 0.5)
+ 
+The Scatter plot of Sales vs PosDisplay shows a linear correlation between those two variables with some homoscedasticity (increase in variance of one variable with the increase in the other variable).
+
+```{r, include=TRUE}
+#Boxplots by quarter
+for(cat_var in names(data[sapply(data, is.factor)])) {
+  for(num_var in names(data[sapply(data, is.numeric)])) {
+    boxplot(data[[num_var]] ~ data[[cat_var]], 
+            main = paste("Boxplot of", num_var, "by", cat_var),
+            xlab = cat_var, ylab = num_var)
+  }
+}
+```
+
+```{r, include=TRUE}
+library(ggplot2)
+library(rlang) # for sym()
+
+#Correlation matrix
+numeric_data <- data[sapply(data, is.numeric)]
+correlation_matrix <- cor(numeric_data, use = "complete.obs")
+
+#Find pairs with strong correlation
+strong_correlations <- which(abs(correlation_matrix) > 0.5, arr.ind = TRUE)
+
+#Filter out correlations of variables with themselves
+strong_correlations <- strong_correlations[strong_correlations[, 1] != strong_correlations[, 2], ]
+
+#Iterate over pairs and plot with R-squared and equation
+for (i in 1:nrow(strong_correlations)) {
+  var1 <- names(numeric_data)[strong_correlations[i, 1]]
+  var2 <- names(numeric_data)[strong_correlations[i, 2]]
+
+  #Fit linear model
+  lm_model <- lm(as.formula(paste(var2, "~", var1)), data = numeric_data)
+  summary_lm <- summary(lm_model)
+  r_squared <- summary_lm$r.squared
+  coef_lm <- summary_lm$coefficients
+  
+  intercept <- round(coef_lm[1, 1], 2)
+  slope <- round(coef_lm[2, 1], 2)
+  equation <- paste("y =", intercept, ifelse(slope >= 0, "+", ""), slope, "x")
+
+  p <- ggplot(numeric_data, aes(x = !!sym(var1), y = !!sym(var2))) +
+    geom_point() +
+    geom_smooth(method = "lm", col = "blue") +
+    ggtitle(paste("Regression of", var2, "on", var1)) +
+    annotate("text", x = Inf, y = Inf, label = paste("R² =", round(r_squared, 2), ";", equation), 
+             hjust = 1.1, vjust = 1.1, size = 3, colour = "blue")
+
+  print(p)
+}
+```
+We saw that PosDisplay and Sales were highly correlated, so we plot the linear regression of PosDisplay according to Sales. 
+
+Line Equation : 
+Sales = 412033993.25 + 102630 * PosDisplay 
+
+Fitting Coefficient :
+R2 = 0.72
+## Budget Allocation
+
+```{r, include=TRUE}
+library(reshape2)
+melted_data <- melt(data, id.vars = c("Week", "Sales"))
+
+#Create a stacked area chart
+ggplot(melted_data, aes(x = Week, y = Sales, fill = variable)) +
+  geom_area() +
+  labs(title = "Marketing Budget Split Over Weeks",
+       x = "Week",
+       y = "Amount",
+       fill = "Marketing Channel") +
+  theme_minimal()
+
+```
+
+```{r, include=TRUE}
+#Create a stacked bar chart
+ggplot(melted_data, aes(x = Week, y = value, fill = variable)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Marketing Budget Split Over Weeks",
+       x = "Week",
+       y = "Amount",
+       fill = "Marketing Channel") +
+  theme_minimal()
+
+
+```
+
+```{r, include=TRUE}
+library(ggplot2)
+
+#Calculate the total for each week
+total_per_week <- aggregate(value ~ Week, melted_data, sum)
+
+melted_data <- merge(melted_data, total_per_week, by = "Week", suffixes = c("", "_total"))
+
+#Calculate the percentage
+melted_data$percentage <- melted_data$value / melted_data$value_total * 100
+
+#Create a stacked bar chart with percentages
+ggplot(melted_data, aes(x = Week, y = percentage, fill = variable)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Marketing Budget Split Over Weeks (Percentage)",
+       x = "Week",
+       y = "Percentage",
+       fill = "Marketing Channel") +
+  theme_minimal()
+
+```
+
+```{r, include=TRUE}
+
+#cumulative_sum <- colSums(data[, -(1:2)], na.rm = TRUE)
+#cumulative_sum <- colSums(data[, -(1:2) - (length(data)-2):length(data)], na.rm = TRUE)
+cumulative_sum <- colSums(num_data_munster[, -(1:2)], na.rm = TRUE)
+
+#Create a histogram for total sum expenses
+histogram_total <- ggplot() +
+  geom_bar(aes(x = names(cumulative_sum), y = cumulative_sum),
+           stat = "identity", fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Total Marketing Budget Expense Across Categories",
+       x = "Marketing Channel",
+       y = "Total Expense") +
+  theme_minimal() +
+  geom_text(aes(x = names(cumulative_sum), y = cumulative_sum,
+                label = sprintf("%.2f", cumulative_sum)),
+            vjust = -0.5, color = "black", size = 3) +
+  annotate("text", x = 1, y = max(cumulative_sum) * 1.1,
+           label = paste("Total: ", sprintf("%.2f", sum(cumulative_sum))),
+           color = "red", size = 4)
+
+print(histogram_total)
+
+```
+
+```{r, include=TRUE}
+library(scales)
+
+#Calculate the cumulative sum for each category
+cumulative_sum <- colSums(num_data_munster[, -(1:2)], na.rm = TRUE)
+
+pie_data <- data.frame(
+  category = names(cumulative_sum),
+  value = cumulative_sum
+)
+
+#Calculate percentages for the pie chart
+pie_data$percentage <- pie_data$value / sum(pie_data$value) * 100
+
+#Pie chart with percentages
+pie_chart <- ggplot(pie_data, aes(x = "", y = percentage, fill = category)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") +
+  labs(title = "Proportion of Total Marketing Budget Expense Across Categories",
+       x = NULL,
+       y = NULL,
+       fill = "Marketing Channel") +
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_blank()) +
+  geom_text(aes(label = paste0(category, "\n", sprintf("%.2f%%", percentage))),
+            position = position_stack(vjust = 0.5),
+            color = "white",
+            size = 2)
+
+print(pie_chart)
+
+```
+
+```{r, include=TRUE}
+average_expense <- colMeans(num_data_munster[, -(1:2)], na.rm = TRUE)
+
+#Create a bar chart for average expenses
+bar_chart <- ggplot() +
+  geom_bar(aes(x = names(average_expense), y = average_expense),
+           stat = "identity", fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Average Marketing Budget Expense Across Categories",
+       x = "Marketing Channel",
+       y = "Average Expense") +
+  theme_minimal()
+
+print(bar_chart)
+
+
+```
+
+```{r, include=TRUE}
+
+average_percentage <- colMeans(num_data_munster[, -(1:2)] / data$Sales, na.rm = TRUE) * 100
+
+#Create a bar chart for average percentage expenses
+bar_chart_percentage <- ggplot() +
+  geom_bar(aes(x = names(average_percentage), y = average_percentage), 
+           stat = "identity", fill = "green", color = "black", alpha = 0.7) +
+  labs(title = "Average Marketing Budget Expense as Percentage of Sales Across Categories",
+       x = "Marketing Channel",
+       y = "Average Percentage Expense") +
+  theme_minimal()
+
+print(bar_chart_percentage)
+
+```
+
+```{r, include=TRUE}
+cumulative_sum <- apply(num_data_munster[, -(1:2)], 2, cumsum)
+
+#Create a line chart for cumulative sum expenses
+line_chart_cumulative <- ggplot() +
+  geom_line(aes(x = data$Week, y = cumulative_sum[, 1]), color = "red", linetype = "solid", linewidth = 1) +
+  geom_line(aes(x = data$Week, y = cumulative_sum[, 2]), color = "blue", linetype = "solid", linewidth = 1) +
+  geom_line(aes(x = data$Week, y = cumulative_sum[, 3]), color = "green", linetype = "solid", linewidth = 1) +
+  geom_line(aes(x = data$Week, y = cumulative_sum[, 4]), color = "purple", linetype = "solid", linewidth = 1) +
+  geom_line(aes(x = data$Week, y = cumulative_sum[, 5]), color = "orange", linetype = "solid", linewidth = 1) +
+  geom_line(aes(x = data$Week, y = cumulative_sum[, 6]), color = "brown", linetype = "solid", linewidth = 1) +
+  geom_line(aes(x = data$Week, y = cumulative_sum[, 7]), color = "black", linetype = "solid", linewidth = 1) +
+  labs(title = "Cumulative Marketing Budget Expense Across Categories",
+       x = "Week",
+       y = "Cumulative Expense") +
+  theme_minimal()
+
+print(line_chart_cumulative)
+
+
+
+```
+
+```{r, include=TRUE}
+
+cumulative_sum <- apply(num_data_munster[, -(1:2)], 2, cumsum)
+
+library(tidyr)
+data_long <- gather(data, key = "Category", value = "Expense", -Week, -Sales)
+
+#Calculate cumulative sum for each category
+data_long <- data_long %>%
+  group_by(Category) %>%
+  arrange(Week) %>%
+  mutate(CumulativeExpense = cumsum(Expense))
+
+#Create a stacked histogram for cumulative sum expenses
+histogram_cumulative <- ggplot(data_long, aes(x = Week, y = CumulativeExpense, fill = Category)) +
+  geom_histogram(stat = "identity", position = "stack", alpha = 0.7, color = "black") +
+  labs(title = "Cumulative Marketing Budget Expense Across Categories",
+       x = "Week",
+       y = "Cumulative Expense") +
+  scale_fill_manual(values = c("red", "blue", "green", "purple", "orange", "brown", "black")) +
+  theme_minimal()
+
+print(histogram_cumulative)
+
+```
+
+```{r, include=TRUE}
+category_columns <- c("OutofHome", "PrintMagazine", "PosDisplay", 
+                      "SEAGoogle", "SportSponsoring", "TVAdsLocal", "Youtube")
+
+data$TotalSpending <- rowSums(data[, category_columns], na.rm = TRUE)
+
+
+#Plot the curve of sales in function of total spending
+sales_vs_spending_plot <- ggplot(data, aes(x = TotalSpending, y = Sales)) +
+  geom_point(color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Sales vs Total Spending",
+       x = "Total Spending",
+       y = "Sales") +
+  theme_minimal()
+
+print(sales_vs_spending_plot)
+```
+
+# Regression
+
+## OLS regression 
+
+```{r, include=TRUE}
+OutofHome<-data$OutofHome
+PrintMagazine<-data$PrintMagazine 
+PosDisplay<-data$PosDisplay
+SEAGoogle<-data$SEAGoogle
+SportSponsoring<-data$SportSponsoring
+TVAdsLocal<-data$TVAdsLocal
+Youtube<-data$Youtube
+Sales<-data$Sales
+```
+
+```{r, include=TRUE}
+OutofHome<-ts(OutofHome,frequency = 52, start=c(2021, 1))
+PrintMagazine<-ts(PrintMagazine,frequency = 52, start=c(2021, 1)) 
+PosDisplay<-ts(PosDisplay,frequency = 52, start=c(2021, 1))
+SEAGoogle<-ts(SEAGoogle,frequency = 52, start=c(2021, 1))
+SportSponsoring<-ts(SportSponsoring,frequency = 52, start=c(2021, 1))
+TVAdsLocal<-ts(TVAdsLocal,frequency = 52, start=c(2021, 1))
+Youtube<-ts(Youtube,frequency = 52, start=c(2021, 1))
+Sales<-ts(Sales,frequency = 52, start=c(2021, 1))
+```
+
+```{r, include=TRUE}
+#Fit a Regression 
+options(scipen=999)
+
+#ols regression
+regression <- lm(Sales~OutofHome+PrintMagazine+PosDisplay+SEAGoogle+SportSponsoring+TVAdsLocal+Youtube)
+summary(regression)
+```
+
+
+## Log/Log specification
+
+<br/>
+
+$$
+ln(Sales)= \beta_0 + \beta_1 ln(Sales_{t-1}) + \beta_2 ln(OutOfHome_t) + \beta_3 ln(PrintMagazine_t) + \beta_4 ln(PosDisplay_t) + \beta_5 ln(SEAGoogle_t) + \beta_6 ln(SportSponsoring_t) + \beta_7 ln(TVAdsLocal_t) +  \beta_8 ln(Youtube_t) + \epsilon_{t} 
+$$
+
+<br/>
+
+```{r, include=TRUE}
+lnOutofHome<-log(OutofHome+1)
+lnPrintMagazine<-log(PrintMagazine+1)
+lnPosDisplay<-log(PosDisplay+1)
+lnSEAGoogle<-log(SEAGoogle+1)
+lnSportSponsoring<-log(SportSponsoring+1)
+lnTVAdsLocal<-log(TVAdsLocal+1)
+lnYoutube<-log(Youtube+1)
+lnSales<-log(Sales+1)
+```
+
+```{r, include=TRUE}
+#Creating Lagged Traffic Variable 
+m <- 1   # one lag 
+#number of observations
+n <- length(Sales)
+#Build Lag
+L1.lnSales <- c(rep(NA,m), lnSales[1:(n-m)])
+```
+
+Let's train the model
+
+```{r, include=TRUE}
+
+#Fit a Regression 
+options(scipen=999)
+
+#log/log regression 1
+regression1 <- lm(lnSales~L1.lnSales+lnOutofHome+lnPrintMagazine+lnPosDisplay+lnSEAGoogle+lnSportSponsoring+lnTVAdsLocal+lnYoutube)
+summary(regression1)
+
+#log/log regression 2
+regression2 <- lm(lnSales~lnOutofHome+lnPrintMagazine+lnPosDisplay+lnTVAdsLocal)
+summary(regression2)
+```
+
+<br/>
+
+model 1:
+
+$$
+ln(Sales)= 3.001 - 0.021258 ln(Sales_{t-1}) + 0.320783 ln(OutOfHome_t) + 0.441342    ln(PrintMagazine_t) + 0.567471    ln(PosDisplay_t)  -0.099132 ln(SEAGoogle_t)  -0.013340 ln(SportSponsoring_t) + 0.603481    ln(TVAdsLocal_t) +  0.001761    ln(Youtube_t) + \epsilon_{t} 
+$$
+
+<br/>
+
+## Multicorrelation
+
+```{r, include=TRUE}
+library(car)
+
+#VIF analysis
+vif_values <- vif(regression1)
+print(vif_values)
+
+#Eigenvalues
+eigenvalues <- c(2.1554, 1.2116, 1.0670, 1.0337, 0.9284, 0.8617, 0.7058, 0.0363)
+
+#Proportion of variance explained by each eigenvalue
+variance_proportion <- eigenvalues / sum(eigenvalues)
+print(variance_proportion)
+
+eigen_info <- eigen(correlation_matrix)
+
+variable_names <- colnames(correlation_matrix)
+eigenvalue_pairs <- data.frame(Variable = variable_names, Eigenvalue = eigen_info$values)
+
+#Display eigenvalues with associated feature names
+print(eigenvalue_pairs)
+```
+
+## Model fitting
+
+```{r, include=TRUE}
+#Model fit plot 
+fitted_sales<-ts(regression1$fitted.values, frequency = 52)
+plot(lnSales, type="l", col="blue", main="Sales",lwd=2)
+lines(fitted_sales, type="b", col="red")
+legend("topleft", lty=1, col=c("blue", "red"),
+       c("Logged Sales Data","Fitted"))
+```
+
+# Results: Channels contribution
+
+```{r, include=TRUE}
+#Retrieve each model coefficient: 
+beta_OutofHome<-summary(regression1)$coefficients[3,1]
+beta_PrintMagazine<-summary(regression1)$coefficients[4,1]
+beta_PosDisplay<-summary(regression1)$coefficients[5,1]
+beta_SEAGoogle<-summary(regression1)$coefficients[6,1]
+beta_SportSponsoring<-summary(regression1)$coefficients[7,1]
+beta_TVAdsLocal<-summary(regression1)$coefficients[8,1]
+beta_Youtube<-summary(regression1)$coefficients[9,1]
+
+#Calculate the baseline (average) Sales: 
+average_sales<-mean(Sales)
+
+#Calculate the baseline (average) advertising spending for each media: 
+average_OutofHome<-mean(OutofHome)
+average_PrintMagazine<-mean(PrintMagazine)
+average_PosDisplay<-mean(PosDisplay)
+average_SEAGoogle<-mean(SEAGoogle)
+average_SportSponsoring<-mean(SportSponsoring)
+average_TVAdsLocal<-mean(TVAdsLocal)
+average_Youtube<-mean(Youtube)
+
+#Finally, calculate the unit effects: 
+theta_OutofHome<-beta_OutofHome*(average_sales/average_OutofHome)
+theta_PrintMagazine<-beta_PrintMagazine*(average_sales/average_PrintMagazine)
+theta_PosDisplay<-beta_PosDisplay*(average_sales/average_PosDisplay)
+theta_SEAGoogle<-beta_SEAGoogle*(average_sales/average_SEAGoogle)
+theta_SportSponsoring<-beta_SportSponsoring*(average_sales/average_SportSponsoring)
+theta_TVAdsLocal<-beta_TVAdsLocal*(average_sales/average_TVAdsLocal)
+theta_Youtube<-beta_Youtube*(average_sales/average_Youtube)
+
+#How much Sales we got thanks to TV, Pos, magazine etc.?
+sum_OutofHome<-sum(OutofHome)
+sum_PrintMagazine<-sum(PrintMagazine)
+sum_PosDisplay<-sum(PosDisplay)
+sum_SEAGoogle<-sum(SEAGoogle)
+sum_SportSponsoring<-sum(SportSponsoring)
+sum_TVAdsLocal<-sum(TVAdsLocal)
+sum_Youtube<-sum(Youtube)
+
+
+#Each media's contribution to Sales 
+OutofHome_contribution<-theta_OutofHome*sum_OutofHome
+PrintMagazine_contribution<-theta_PrintMagazine*sum_PrintMagazine
+PosDisplay_contribution<-theta_PosDisplay*sum_PosDisplay
+SEAGoogle_contribution<-theta_SEAGoogle*sum_SEAGoogle
+SportSponsoring_contribution<-theta_SportSponsoring*sum_SportSponsoring
+TVAdsLocal_contribution<-theta_TVAdsLocal*sum_TVAdsLocal
+Youtube_contribution<-theta_Youtube*sum_Youtube
+
+
+print(OutofHome_contribution)
+print(PrintMagazine_contribution)
+print (PosDisplay_contribution)
+print (SEAGoogle_contribution)
+print (SportSponsoring_contribution)
+print (TVAdsLocal_contribution)
+print (Youtube_contribution)
+
+```
+
+```{r, include=TRUE}
+#Bar plot information 
+category_contribution<-c(OutofHome_contribution,PrintMagazine_contribution,PosDisplay_contribution,SEAGoogle_contribution,SportSponsoring_contribution,TVAdsLocal_contribution,Youtube_contribution)
+category_contribution=round(category_contribution, digits=0)
+cat_names<-c("OutofHome","PrintMagazine", "PosDisplay","SEAGoogle", "SportSponsoring","TVAdsLocal","Youtube")
+df<-data.frame(cat_names,category_contribution)
+df
+```
+
+```{r, include=TRUE}
+bar_plot1<-ggplot(data=df,aes(x=cat_names,y=category_contribution)) + 
+  geom_bar(stat="identity", color="black", 
+           fill=c("Red","Orange","Blue","Green","Purple","Brown","Yellow")) +
+  geom_text(aes(label=category_contribution), vjust=-0.3, size=3.5)+
+  labs(title="Contribution to Sales", x="Categories", y="Contribution") +
+  theme_minimal()
+bar_plot1
+
+```
+
+```{r, include=TRUE}
+library(formattable)
+
+#Calculate each media's contribution as %. 
+allmedia_contribution<-OutofHome_contribution+PosDisplay_contribution+PrintMagazine_contribution+SEAGoogle_contribution+SportSponsoring_contribution+TVAdsLocal_contribution+Youtube_contribution
+
+OutofHome_pct<-OutofHome_contribution/allmedia_contribution
+PrintMagazine_pct<-PrintMagazine_contribution/allmedia_contribution
+PosDisplay_pct<-PosDisplay_contribution/allmedia_contribution
+SEAGoogle_pct<-SEAGoogle_contribution/allmedia_contribution
+SportSponsoring_pct<-SportSponsoring_contribution/allmedia_contribution
+TVAdsLocal_pct<-TVAdsLocal_contribution/allmedia_contribution
+Youtube_pct<-Youtube_contribution/allmedia_contribution
+
+##all media in a vector (contribution in %)
+pct_contribution<-c(OutofHome_pct,PrintMagazine_pct,PosDisplay_pct,SEAGoogle_pct,SportSponsoring_pct,TVAdsLocal_pct,Youtube_pct)   
+pct_contribution<-percent(pct_contribution)        # this line writes the numbers in %
+
+
+cat_names<-c("OutofHome","PrintMagazine", "PosDisplay","SEAGoogle", "SportSponsoring","TVAdsLocal","Youtube")
+df2<-data.frame(cat_names,pct_contribution)
+df2
+
+
+```
+
+```{r, include=TRUE}
+barp_plot2<-ggplot(data=df2,aes(x=cat_names,y=pct_contribution)) + 
+  geom_bar(stat="identity", color="black", 
+           fill=c("Red","Orange","Blue","Green","Purple","Brown","Yellow")) +
+  geom_text(aes(label=pct_contribution), vjust=-0.3, size=3.5)+
+  labs(title="Contribution to Sales in %", x="Categories", y="Contribution (%)") +
+  theme_minimal()
+barp_plot2
+```
+
+# Return On Investment
+
+```{r, include=TRUE}
+#Calculate the cost of each media
+cost_OutofHome<-sum(OutofHome)
+cost_PrintMagazine<-sum(PrintMagazine)
+cost_PosDisplay<-sum(PosDisplay)
+cost_SEAGoogle<-sum(SEAGoogle)
+cost_SportSponsoring<-sum(SportSponsoring)
+cost_TVAdsLocal<-sum(TVAdsLocal)
+cost_Youtube<-sum(Youtube)
+cost_total<-cost_OutofHome+cost_PrintMagazine+cost_PosDisplay+cost_SEAGoogle+cost_SportSponsoring+cost_TVAdsLocal+cost_Youtube
+
+cost<-c(cost_OutofHome,cost_PrintMagazine,cost_PosDisplay,cost_SEAGoogle,cost_SportSponsoring,cost_TVAdsLocal,cost_Youtube)
+cost=round(cost, digits=0)
+```
+
+```{r, include=TRUE}
+#Sales Contribution vs. Cost  
+df3<-data.frame(cat_names,pct_contribution, cost)
+df3
+```
+
+```{r, include=TRUE}
+
+roi_OutofHome=OutofHome_contribution/cost_OutofHome
+roi_PrintMagazine=PrintMagazine_contribution/cost_PrintMagazine
+roi_PosDisplay=PosDisplay_contribution/cost_PosDisplay
+roi_SEAGoogle=SEAGoogle_contribution/cost_SEAGoogle
+roi_SportSponsoring=SportSponsoring_contribution/cost_SportSponsoring
+roi_TVAdsLocal=TVAdsLocal_contribution/cost_TVAdsLocal
+roi_Youtube=Youtube_contribution/cost_Youtube
+roi_Total=sum(OutofHome_contribution,PrintMagazine_contribution,PosDisplay_contribution,SEAGoogle_contribution,SportSponsoring_contribution,TVAdsLocal_contribution,Youtube_contribution)/cost_total
+
+
+#TROMI Plot input 
+roi<-c(roi_OutofHome,roi_PosDisplay,roi_PrintMagazine,roi_SEAGoogle,roi_SportSponsoring,roi_TVAdsLocal,roi_Youtube)
+#Round off the numbers. 
+roi=round(roi, digits=0)
+
+df4<-data.frame(cat_names,pct_contribution, cost, roi)
+df4
+
+roi_Total
+```
+
+```{r, include=TRUE}
+#TROMI bar plot 
+bar_plot4<-ggplot(data=df4, aes(x=cat_names,y=roi)) + 
+  geom_bar(stat="identity", color="black", 
+           fill=c("Red","Orange","Blue","Green","Purple","Brown","Yellow")) +
+  geom_text(aes(label=roi), vjust=-0.3, size=3.5) +
+  labs(title="Sales Return on Marketing Investment", x="Categories", y="TROMI") +
+  theme_minimal()
+
+bar_plot4
+```
+
+```{r, include=TRUE}
+#Actual Budget Spending
+costshare_OutofHome<-cost_OutofHome/cost_total
+costshare_PosDisplay<-cost_PosDisplay/cost_total
+costshare_PrintMagazine<-cost_PrintMagazine/cost_total
+costshare_SEAGoogle<-cost_SEAGoogle/cost_total
+costshare_SportSponsoring<-cost_SportSponsoring/cost_total
+costshare_TVAdsLocal<-cost_TVAdsLocal/cost_total
+costshare_Youtube<-cost_Youtube/cost_total
+
+#Input for the pie-chart 
+slices_actual<-c(costshare_OutofHome,costshare_PosDisplay,costshare_PrintMagazine,costshare_SEAGoogle,costshare_SportSponsoring,costshare_TVAdsLocal,costshare_Youtube )
+lbls_actual<-c("OutofHome", "PosDisplay", "PrintMagazine","SEAGoogle", "SportSponsoring","TVAdsLocal","Youtube")
+pct_actual<-round(slices_actual*100)
+lbls_actual<-paste(lbls_actual, pct_actual)          # add data to labels
+lbls_actual<-paste(lbls_actual, "%", sep="")  # add % sign to labels
+
+#Get the pie-chart
+pie(slices_actual, labels=lbls_actual, col=rainbow(length(lbls_actual)), main="Actual Ad Spending" )
+```
+
+# Implications and Recommendations: Optimal Allocation
+
+## Pie chart of optimal allocation if we don't keep the ones with negative RoI
+
+```{r, include=TRUE}
+#The sum of all elasticities 
+beta_allmedia<-beta_OutofHome+beta_PosDisplay+beta_PrintMagazine+beta_SEAGoogle+beta_SportSponsoring+beta_TVAdsLocal+beta_Youtube
+
+#Optimal resource allocation
+optim_OutofHome<-beta_OutofHome/beta_allmedia
+optim_PosDisplay<-beta_PosDisplay/beta_allmedia
+optim_PrintMagazine<-beta_PrintMagazine/beta_allmedia
+optim_TVAdsLocal<-beta_TVAdsLocal/beta_allmedia
+optim_Youtube<-beta_Youtube/beta_allmedia
+optim_SEAGoogle<-0
+optim_SportSponsoring<-0
+```
+
+```{r, include=TRUE}
+#Pie-chart ingredients 
+optimal_spend<-c(optim_OutofHome,optim_PosDisplay,optim_PrintMagazine,optim_SEAGoogle,optim_SportSponsoring,optim_TVAdsLocal,optim_Youtube)
+optimal_spend=round(optimal_spend, digits=2)
+optimal_spend
+
+slices_optim<-c(optim_OutofHome,optim_PosDisplay,optim_PrintMagazine,optim_SEAGoogle,optim_SportSponsoring,optim_TVAdsLocal,optim_Youtube)
+lbls_optim<-c("OutofHome","PrintMagazine", "PosDisplay","SEAGoogle", "SportSponsoring","TVAdsLocal","Youtube")
+pct_optim<-round(slices_optim*100)
+lbls_optim<-paste(lbls_optim, pct_optim)   # paste variable names to data labels 
+lbls_optim<-paste(lbls_optim, "%", sep="") # add % sign to labels
+
+pie(slices_optim, labels=lbls_optim, col=rainbow(length(lbls_optim)), main="Optimal Budget Allocation" )
+```
+## Pie chart of optimal allocation following our analysis
+
+```{r, include=TRUE}
+slices_optim<-c(0.46, 0.27, 0.08, 0.01, 0.17, 0.01)
+lbls_optim<-c("SportSponsoring","PrintMagazine", "PosDisplay", "OutofHome","TVAdsLocal","Youtube")
+pct_optim<-round(slices_optim*100)
+lbls_optim<-paste(lbls_optim, pct_optim)   # paste variable names to data labels 
+lbls_optim<-paste(lbls_optim, "%", sep="") # add % sign to labels
+
+# Get the pie-chart
+pie(slices_optim, labels=lbls_optim, col=rainbow(length(lbls_optim)), main="Optimal Budget Allocation" )
+```
+
+
+#Sales prediction after budget restructuring
+```{r, include=TRUE}
+original_data <- data
+# Adjust budget allocations in your dataset based on optimal strategy
+data$SportSponsoring <- data$SportSponsoring * 0.46
+data$PrintMagazine <- data$PrintMagazine * 0.27
+data$PosDisplay <- data$PosDisplay * 0.08
+data$OutofHome <- data$OutofHome * 0.01
+data$TVAdsLocal <- data$TVAdsLocal * 0.17
+data$Youtube <- data$Youtube * 0.01
+data$SEAGoogle <- data$SEAGoogle * 0
+```
+
+```{r, include=TRUE}
+# Build a multiple linear regression model with adjusted budgets
+model_optimal <- lm(Sales ~ SportSponsoring + PrintMagazine + PosDisplay + OutofHome + TVAdsLocal + Youtube, data = data)
+
+# Display the summary of the regression model with optimal budget allocations
+summary(model_optimal)
+```
+
+```{r, include=TRUE}
+# Predict sales using the regression model with optimal budget allocations
+model_optimal <- lm(Sales ~ SportSponsoring + PrintMagazine + PosDisplay + OutofHome + TVAdsLocal + Youtube, data = data)
+predicted_sales_original <- predict(model_optimal, newdata = data)
+data$Predicted_Sales_Restructured <- predicted_sales_original
+```
+
+
+```{r, include=TRUE}
+ggplot(data, aes(x = Week)) +
+          geom_line(aes(y = Sales, colour = "Actual Sales")) +
+          geom_line(aes(y = Predicted_Sales_Restructured, colour = "Predicted Sales")) +
+          labs(title = "Actual vs Predicted Sales by Week", x = "Week", y = "Sales") +
+          scale_colour_manual(values = c("Actual Sales" = "red", "Predicted Sales" = "blue"),
+                              name = "Legend",
+                              breaks = c("Actual Sales", "Predicted Sales"),
+                              labels = c("Actual Sales" = ": Actual Sales", "Predicted Sales" = ": Predicted Sales")) +
+          theme_minimal() +
+          theme(legend.position = "bottom")
+```
+
+
+After the reallocation of the budget, we obtain this graph of the actual sales and the predicted sales with the new budget. 
+However, we can see that the sales are the same, meaning our model has some issues, it could be in the new data or in our regression model. 
+Indeed, the change in budget should have changed the total number of sales. 
